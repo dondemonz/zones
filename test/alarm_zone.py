@@ -1,6 +1,8 @@
 from model.input_data import *
 from fixture.work_with_db import DbHelper
 import time
+import winreg
+from winreg import *
 
 def test_check_zones(fix_alarm_zone):
     # учитывая, что зона хранится только с объектом, таблицу obj_cam_zone в данном случае чистить не надо
@@ -11,7 +13,7 @@ def test_check_zones(fix_alarm_zone):
     db.check_alarm_zone_no_exists()
     db1 = DbHelper(dbname="fsindex")
     db1.clean_fsindex_db()
-    fix_alarm_zone.send_react(("MEDIA_CLIENT|1|ADD_SEQUENCE|mode<1x1>,seq<|" + cam_id2 + ">").encode("UTF-8"))
+    #fix_alarm_zone.send_react(("MEDIA_CLIENT|1|ADD_SEQUENCE|mode<1x1>,seq<|" + cam_id2 + ">").encode("UTF-8"))
     fix_alarm_zone.send_react(("CAM|" + cam_id2 + "|ARM").encode("UTF-8"))
     time.sleep(8)
     fix_alarm_zone.send_react(("CAM|" + cam_id2 + "|DISARM").encode("UTF-8"))
@@ -30,7 +32,7 @@ def test_check_zones(fix_alarm_zone):
     db1.clean_fsindex_db()
     time.sleep(1)
 
-def test_check_information_zone_works(fix_information_zone):
+def test_check_general_purpose_zone_works(fix_information_zone):
     db1 = DbHelper(dbname="fsindex")
     db1.clean_fsindex_db()
     fix_information_zone.send_react(("MEDIA_CLIENT|1|ADD_SEQUENCE|mode<1x1>,seq<|" + cam_id2 + ">").encode("UTF-8"))
@@ -52,6 +54,37 @@ def test_check_blackened_zone_works(fix_information_zone):
     db1.check_alarm_not_in_db()
     time.sleep(1)
 
+def test_check_blackened_zone_with_alarmed_always_works(fix_information_zone):
+    db1 = DbHelper(dbname="fsindex")
+    db1.clean_fsindex_db()
+    fix_information_zone.send_react(("MEDIA_CLIENT|1|ADD_SEQUENCE|mode<1x1>,seq<|" + cam_id2 + ">").encode("UTF-8"))
+    time.sleep(2)
+    with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\ISS\SecurOS\Niss400\Core\RT\CAM\203") as key:
+        value = QueryValueEx(key, "state")
+    assert value[0] == "DISARMED"
+
+    fix_information_zone.send_event(("CORE||UPDATE_OBJECT|objtype<CAM_ZONE>,objid<" + zone_id2 + ">,armed_always<1>").encode("UTF-8"))
+    fix_information_zone.send_event(("CORE||UPDATE_OBJECT|objtype<CAM_ZONE>,objid<" + zone_id2 + ">,blackened<0>").encode("UTF-8"))
+
+    with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\ISS\SecurOS\Niss400\Core\RT\CAM\203") as key:
+        value1 = QueryValueEx(key, "state")
+    assert value1[0] == "ARMED"
+    time.sleep(3)
+
+    with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\ISS\SecurOS\Niss400\Core\RT\CAM\203") as key:
+        value1 = QueryValueEx(key, "state")
+    assert value1[0] == "ALARMED"
+
+    time.sleep(8)
+    #проверяем, действительно ли камера встала на охрану
+
+    #проверяем, можно ли снять камеру с охраны
+    fix_information_zone.send_react(("CAM|" + cam_id2 + "|DISARM").encode("UTF-8"))
+
+
+    db1.check_alarm_exists_in_db()
+    time.sleep(1)
+
 def test_check_smart_search_works(fix_information_zone):
     db1 = DbHelper(dbname="fsindex")
     db1.clean_fsindex_smart_search()
@@ -62,3 +95,23 @@ def test_check_smart_search_works(fix_information_zone):
     fix_information_zone.send_react(("CAM|" + cam_id2 + "|DISARM").encode("UTF-8"))
     db1.check_smart_search_alarm_not_in_db()
     time.sleep(1)
+
+def test_check_information_zone_works(fix_information_zone):
+    db1 = DbHelper(dbname="fsindex")
+    db1.clean_fsindex_db()
+    fix_information_zone.send_react(("MEDIA_CLIENT|1|ADD_SEQUENCE|mode<1x1>,seq<|" + cam_id2 + ">").encode("UTF-8"))
+    fix_information_zone.send_event(("CORE||UPDATE_OBJECT|objtype<CAM_ZONE>,objid<" + zone_id2 + ">,alarmed<0>").encode("UTF-8"))
+    fix_information_zone.send_react(("CAM|" + cam_id2 + "|ARM").encode("UTF-8"))
+    time.sleep(8)
+    fix_information_zone.send_react(("CAM|" + cam_id2 + "|DISARM").encode("UTF-8"))
+    db1.check_alarm_not_in_db()
+    time.sleep(1)
+
+
+def test_check_registry():
+    with OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\ISS\SecurOS\Niss400\Core\RT\CAM\203") as key:
+        value = QueryValueEx(key, "state")
+    assert value[0] == "DISARMED"
+    print(value[0])
+
+
